@@ -1,0 +1,9 @@
+{
+	"authors": [
+		"Armin Kleinert"
+	],
+	"copyright": "Copyright © 2020, Armin Kleinert",
+	"description": "A minimal D application.",
+	"license": "BSD-2",
+	"name": "linenoised"
+}
