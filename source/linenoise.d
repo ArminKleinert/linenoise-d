@@ -15,7 +15,7 @@ import core.sys.posix.unistd;
 import std.string : icmp, toStringz;
 import std.conv : to;
 
-struct linenoiseCompletions {
+extern (C) struct linenoiseCompletions {
     size_t len;
     char** cvec;
 }
@@ -91,17 +91,17 @@ enum KEY_ACTION {
  * the user is typing, the terminal will just display a corresponding
  * number of asterisks, like "****". This is useful for passwords and other
  * secrets that should not be displayed. */
-void linenoiseMaskModeEnable() {
+extern (C) void linenoiseMaskModeEnable() {
     maskmode = 1;
 }
 
 /* Disable mask mode. */
-void linenoiseMaskModeDisable() {
+extern (C) void linenoiseMaskModeDisable() {
     maskmode = 0;
 }
 
 /* Set if to use or not the multi line mode. */
-void linenoiseSetMultiLine(int ml) {
+extern (C) void linenoiseSetMultiLine(int ml) {
     mlmode = ml;
 }
 
@@ -237,7 +237,7 @@ failed:
 }
 
 /* Clear the screen. Used to handle ctrl+l */
-void linenoiseClearScreen() {
+extern (C) void linenoiseClearScreen() {
     if (write(STDOUT_FILENO, toStringz("\x1b[H\x1b[2J"), 7) <= 0) {
         /* nothing to do, just to avoid warning. */
     }
@@ -328,19 +328,19 @@ private int completeLine(linenoiseState* ls) {
 }
 
 /* Register a callback function to be called for tab-completion. */
-void linenoiseSetCompletionCallback(linenoiseCompletionCallback fn) {
+extern (C) void linenoiseSetCompletionCallback(linenoiseCompletionCallback fn) {
     completionCallback = fn;
 }
 
 /* Register a hits function to be called to show hits to the user at the
  * right of the prompt. */
-void linenoiseSetHintsCallback(linenoiseHintsCallback fn) {
+extern (C) void linenoiseSetHintsCallback(linenoiseHintsCallback fn) {
     hintsCallback = fn;
 }
 
 /* Register a function to free the hints returned by the hints callback
  * registered with linenoiseSetHintsCallback(). */
-void linenoiseSetFreeHintsCallback(linenoiseFreeHintsCallback fn) {
+extern (C) void linenoiseSetFreeHintsCallback(linenoiseFreeHintsCallback fn) {
     freeHintsCallback = fn;
 }
 
@@ -348,7 +348,7 @@ void linenoiseSetFreeHintsCallback(linenoiseFreeHintsCallback fn) {
  * in order to add completion options given the input string when the
  * user typed <tab>. See the example.c source code for a very easy to
  * understand example. */
-void linenoiseAddCompletion(linenoiseCompletions* lc, const char* str) {
+extern (C) void linenoiseAddCompletion(linenoiseCompletions* lc, const char* str) {
     size_t len = strlen(str);
     char* copied;
     char** cvec;
@@ -392,13 +392,13 @@ private void abAppend(abuf* ab, const char* s, int len) {
     (*ab).len += len;
 }
 
-static void abFree(abuf* ab) {
+private void abFree(abuf* ab) {
     free((*ab).b);
 }
 
 /* Helper of refreshSingleLine() and refreshMultiLine() to show hints
  * to the right of the prompt. */
-void refreshShowHints(abuf* ab, linenoiseState* l, int plen) {
+private void refreshShowHints(abuf* ab, linenoiseState* l, int plen) {
     char[64] seq;
     auto seq_ptr = seq.ptr;
     if (hintsCallback && plen + (*l).len < (*l).cols) {
@@ -704,7 +704,7 @@ void linenoiseEditDeletePrevWord(linenoiseState* l) {
  * when ctrl+d is typed.
  *
  * The function returns the length of the current buffer. */
-static int linenoiseEdit(int stdin_fd, int stdout_fd, char* buf, size_t buflen, const char* prompt) {
+private int linenoiseEdit(int stdin_fd, int stdout_fd, char* buf, size_t buflen, const char* prompt) {
 
     /* Populate the linenoise state that we pass to functions implementing
      * specific editing functionalities. */
@@ -848,7 +848,7 @@ static int linenoiseEdit(int stdin_fd, int stdout_fd, char* buf, size_t buflen, 
                         break;
                     }
                 }
-            } /* ESC O sequences. */
+            }  /* ESC O sequences. */
             else if (seq[0] == 'O') {
                 switch (seq[1]) {
                 case 'H': /* Home */
@@ -898,7 +898,7 @@ static int linenoiseEdit(int stdin_fd, int stdout_fd, char* buf, size_t buflen, 
 /* This special mode is used by linenoise in order to print scan codes
  * on screen for debugging / development purposes. It is implemented
  * by the linenoise_example program using the --keycodes option. */
-void linenoisePrintKeyCodes() {
+extern (C) void linenoisePrintKeyCodes() {
     char[4] quit;
     auto quit_ptr = quit.ptr;
 
@@ -929,7 +929,7 @@ void linenoisePrintKeyCodes() {
 
 /* This function calls the line editing function linenoiseEdit() using
  * the STDIN file descriptor set in raw mode. */
-static int linenoiseRaw(char* buf, size_t buflen, const char* prompt) {
+private int linenoiseRaw(char* buf, size_t buflen, const char* prompt) {
     int count;
 
     if (buflen == 0) {
@@ -989,7 +989,7 @@ private char* linenoiseNoTTY() {
  * for a blacklist of stupid terminals, and later either calls the line
  * editing function or uses dummy fgets() so that you will be able to type
  * something even in the most desperate of the conditions. */
-char* linenoise(const char* prompt) {
+extern (C) char* linenoise(const char* prompt) {
     char[LINENOISE_MAX_LINE] buf;
     auto buf_ptr = buf.ptr;
     int count;
@@ -1023,7 +1023,7 @@ char* linenoise(const char* prompt) {
  * the linenoise returned buffer is freed with the same allocator it was
  * created with. Useful when the main program is using an alternative
  * allocator. */
-void linenoiseFree(void* ptr) {
+extern (C) void linenoiseFree(void* ptr) {
     free(ptr);
 }
 
@@ -1054,7 +1054,7 @@ private extern (C) void linenoiseAtExit() {
  * histories, but will work well for a few hundred of entries.
  *
  * Using a circular buffer is smarter, but a bit more complex to handle. */
-int linenoiseHistoryAdd(const char* line) {
+extern (C) int linenoiseHistoryAdd(const char* line) {
     char* linecopy;
 
     if (history_max_len == 0)
@@ -1091,7 +1091,7 @@ int linenoiseHistoryAdd(const char* line) {
  * if there is already some history, the function will make sure to retain
  * just the latest 'len' elements if the new history length value is smaller
  * than the amount of items already inside the history. */
-int linenoiseHistorySetMaxLen(int len) {
+extern (C) int linenoiseHistorySetMaxLen(int len) {
     char** newhis;
 
     if (len < 1)
@@ -1124,7 +1124,7 @@ int linenoiseHistorySetMaxLen(int len) {
 
 /* Save the history in the specified file. On success 0 is returned
  * otherwise -1 is returned. */
-int linenoiseHistorySave(const char* filename) {
+extern (C) int linenoiseHistorySave(const char* filename) {
     mode_t old_umask = umask(S_IXUSR | S_IRWXG | S_IRWXO);
     FILE* fp;
     int j;
@@ -1145,7 +1145,7 @@ int linenoiseHistorySave(const char* filename) {
  *
  * If the file exists and the operation succeeded 0 is returned, otherwise
  * on error -1 is returned. */
-int linenoiseHistoryLoad(const char* filename) {
+extern (C) int linenoiseHistoryLoad(const char* filename) {
     FILE* fp = fopen(filename, "r");
     char[LINENOISE_MAX_LINE] buf;
     auto buf_ptr = buf.ptr;
