@@ -6,9 +6,11 @@ void main() {
     import std.stdio;
     import std.conv : to;
     while (1) {
-        auto text = to!string(linenoise( "> "));
-        writeln(text);
-        if (text == "exit") return;
+        auto text = linenoise( "> ");
+        linenoiseHistoryAdd(text);
+        auto outtext = to!string(text);
+        writeln(outtext);
+        if (outtext == "exit") return;
     }
 }
 
