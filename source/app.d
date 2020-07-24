@@ -952,7 +952,7 @@ private char* linenoiseNoTTY() {
                 return line;
             }
         } else {
-            line[len] = c;
+            line[len] = cast(char) c;
             len++;
         }
     }
@@ -991,6 +991,144 @@ char* linenoise(const char* prompt) {
         return strdup(buf_ptr);
     }
 }
+
+/* This is just a wrapper the user may want to call in order to make sure
+ * the linenoise returned buffer is freed with the same allocator it was
+ * created with. Useful when the main program is using an alternative
+ * allocator. */
+void linenoiseFree(void *ptr) {
+    free(ptr);
+}
+
+/* ================================ History ================================= */
+
+/* Free the history, but does not reset it. Only used when we have to
+ * exit() to avoid memory leaks are reported by valgrind & co. */
+private void freeHistory() {
+    if (history) {
+        int j;
+
+        for (j = 0; j < history_len; j++)
+            free(history[j]);
+        free(history);
+    }
+}
+
+/* At exit we'll try to fix the terminal to the initial conditions. */
+private void linenoiseAtExit() {
+    disableRawMode(STDIN_FILENO);
+    freeHistory();
+}
+
+/* This is the API call to add a new entry in the linenoise history.
+ * It uses a fixed array of char pointers that are shifted (memmoved)
+ * when the history max length is reached in order to remove the older
+ * entry and make room for the new one, so it is not exactly suitable for huge
+ * histories, but will work well for a few hundred of entries.
+ *
+ * Using a circular buffer is smarter, but a bit more complex to handle. */
+int linenoiseHistoryAdd(const char *line) {
+    char *linecopy;
+
+    if (history_max_len == 0) return 0;
+
+    /* Initialization on first call. */
+    if (history == null) {
+        history = malloc((char*).sizeof * history_max_len);
+        if (history == null) return 0;
+        memset(history,0,((char*).sizeof * history_max_len));
+    }
+
+    /* Don't add duplicated lines. */
+    if (history_len && !strcmp(history[history_len-1], line)) return 0;
+
+    /* Add an heap allocated copy of the line in the history.
+     * If we reached the max length, remove the older line. */
+    linecopy = strdup(line);
+    if (!linecopy) return 0;
+    if (history_len == history_max_len) {
+        free(history[0]);
+        memmove(history,history+1,(char*).sizeof * (history_max_len-1));
+        history_len--;
+    }
+    history[history_len] = linecopy;
+    history_len++;
+    return 1;
+}
+
+/* Set the maximum length for the history. This function can be called even
+ * if there is already some history, the function will make sure to retain
+ * just the latest 'len' elements if the new history length value is smaller
+ * than the amount of items already inside the history. */
+int linenoiseHistorySetMaxLen(int len) {
+    char** newhis;
+
+    if (len < 1) return 0;
+    if (history) {
+        int tocopy = history_len;
+
+        newhis = malloc((char*).sizeof * len);
+        if (newhis == null) return 0;
+
+        /* If we can't copy everything, free the elements we'll not use. */
+        if (len < tocopy) {
+            int j;
+
+            for (j = 0; j < tocopy-len; j++) free(history[j]);
+            tocopy = len;
+        }
+        memset(newhis,0,(char*).sizeof * len);
+        memcpy(newhis,history+(history_len-tocopy), (char*).sizeof * tocopy);
+        free(history);
+        history = newhis;
+    }
+    history_max_len = len;
+    if (history_len > history_max_len)
+        history_len = history_max_len;
+    return 1;
+}
+
+/* Save the history in the specified file. On success 0 is returned
+ * otherwise -1 is returned. */
+int linenoiseHistorySave(const char *filename) {
+    mode_t old_umask = umask(S_IXUSR|S_IRWXG|S_IRWXO);
+    FILE *fp;
+    int j;
+
+    fp = fopen(filename,"w");
+    umask(old_umask);
+    if (fp == null) return -1;
+    chmod(filename,S_IRUSR|S_IWUSR);
+    for (j = 0; j < history_len; j++)
+        fprintf(fp,"%s\n",history[j]);
+    fclose(fp);
+    return 0;
+}
+
+/* Load the history from the specified file. If the file does not exist
+ * zero is returned and no operation is performed.
+ *
+ * If the file exists and the operation succeeded 0 is returned, otherwise
+ * on error -1 is returned. */
+int linenoiseHistoryLoad(const char *filename) {
+    FILE *fp = fopen(filename,"r");
+    char[LINENOISE_MAX_LINE] buf;
+    auto buf_ptr = buf.ptr;
+
+    if (fp == null) return -1;
+
+    while (fgets(buf,LINENOISE_MAX_LINE,fp) != null) {
+        char *p;
+
+        p = strchr(buf,'\r');
+        if (!p) p = strchr(buf,'\n');
+        if (p) *p = '\0';
+        linenoiseHistoryAdd(buf);
+    }
+    fclose(fp);
+    return 0;
+}
+
 
 
 /*
