@@ -27,7 +27,7 @@ alias linenoiseFreeHintsCallback = void function(void*);
 const int LINENOISE_DEFAULT_HISTORY_MAX_LEN = 100;
 const int LINENOISE_MAX_LINE = 4096;
 
-private const string[4] unsupported_term = ["dumb", "cons25", "emacs", null];
+private const string[3] unsupported_term = ["dumb", "cons25", "emacs"];
 private linenoiseCompletionCallback completionCallback = null;
 private linenoiseHintsCallback hintsCallback = null;
 private linenoiseFreeHintsCallback freeHintsCallback = null;
@@ -176,7 +176,7 @@ private int getCursorPosition(int ifd, int ofd) {
     uint i = 0;
 
     /* Report cursor location */
-    if (write(ofd, toStringz("\x1b[6n"), 4) != 4)
+    if (write(ofd, mixin("toStringz(\"\\x1b[6n\")"), 4) != 4)
         return -1;
 
     /* Read the response: ESC [ rows ; cols R */
@@ -212,7 +212,7 @@ private int getColumns(int ifd, int ofd) {
             goto failed;
 
         /* Go to right margin and get position. */
-        if (write(ofd, toStringz("\x1b[999C"), 6) != 6)
+        if (write(ofd, mixin("toStringz(\"\\x1b[999C\")"), 6) != 6)
             goto failed;
         cols = getCursorPosition(ifd, ofd);
         if (cols == -1)
@@ -222,7 +222,7 @@ private int getColumns(int ifd, int ofd) {
         if (cols > start) {
             char[32] seq;
             auto seq_ptr = seq.ptr;
-            snprintf(seq_ptr, 32, toStringz("\x1b[%dD"), cols - start);
+            snprintf(seq_ptr, 32, "\x1b[%dD", cols - start);
             if (write(ofd, seq_ptr, strlen(seq_ptr)) == -1) {
                 /* Can't recover... */
             }
@@ -238,7 +238,7 @@ failed:
 
 /* Clear the screen. Used to handle ctrl+l */
 extern (C) void linenoiseClearScreen() {
-    if (write(STDOUT_FILENO, toStringz("\x1b[H\x1b[2J"), 7) <= 0) {
+    if (write(STDOUT_FILENO, mixin("toStringz(\"\\x1b[H\\x1b[2J\")"), 7) <= 0) {
         /* nothing to do, just to avoid warning. */
     }
 }
@@ -246,7 +246,7 @@ extern (C) void linenoiseClearScreen() {
 /* Beep, used for completion when there is nothing to complete or when all
  * the choices were already shown. */
 void linenoiseBeep() {
-    fprintf(stderr, toStringz("\x07"));
+    fprintf(stderr, "\x07");
     fflush(stderr);
 }
 
@@ -412,13 +412,13 @@ private void refreshShowHints(abuf* ab, linenoiseState* l, int plen) {
             if (bold == 1 && color == -1)
                 color = 37;
             if (color != -1 || bold != 0)
-                snprintf(seq_ptr, 64, toStringz("\033[%d;%d;49m"), bold, color);
+                snprintf(seq_ptr, 64, "\033[%d;%d;49m", bold, color);
             else
                 seq[0] = '\0';
             abAppend(ab, seq_ptr, cast(int) strlen(seq_ptr));
             abAppend(ab, hint, cast(int) hintlen);
             if (color != -1 || bold != 0)
-                abAppend(ab, toStringz("\033[0m"), 4);
+                abAppend(ab, "\033[0m", 4);
             /* Call the function to free the hint returned. */
             if (freeHintsCallback)
                 freeHintsCallback(hint);
@@ -902,8 +902,7 @@ extern (C) void linenoisePrintKeyCodes() {
     char[4] quit;
     auto quit_ptr = quit.ptr;
 
-    printf(
-            "Linenoise key codes debugging mode.\nPress keys to see scan codes. Type 'quit' at any time to exit.\n");
+    printf("Linenoise key codes debugging mode.\nPress keys to see scan codes. Type 'quit' at any time to exit.\n");
     if (enableRawMode(STDIN_FILENO) == -1)
         return;
     memset(quit_ptr, ' ', 4);
@@ -916,7 +915,7 @@ extern (C) void linenoisePrintKeyCodes() {
             continue;
         memmove(quit_ptr, quit_ptr + 1, quit.sizeof - 1); /* shift string to left. */
         quit[quit.sizeof - 1] = c; /* Insert current char on the right. */
-        if (memcmp(quit_ptr, toStringz("quit"), quit.sizeof) == 0)
+        if (memcmp(quit_ptr, "quit".ptr, quit.sizeof) == 0)
             break;
 
         printf("'%c' %02x (%d) (type quit to exit)\n", isprint(c) ? c : '?', cast(int) c,
