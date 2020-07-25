@@ -9,17 +9,6 @@ void completion(const char* buf, linenoiseCompletions* lc) {
     }
 }
 
-char* hints(const char* buf, int* color, int* bold) {
-    import std.string;
-
-    if (!icmp(fromStringz(buf), "i")) {
-        *color = 33;
-        *bold = 0;
-        return cast(char*)("rb");
-    }
-    return null;
-}
-
 void main() {
     import std.stdio;
     import std.conv : to;
@@ -27,7 +16,6 @@ void main() {
 
     int ml = 0;
     linenoiseSetCompletionCallback(&completion);
-    linenoiseSetHintsCallback(&hints);
 
     while (1) {
         auto text = linenoise("> ");
@@ -43,8 +31,6 @@ void main() {
             linenoisePrintKeyCodes();
         if (outtext == "beep")
             linenoiseBeep();
-        if (outtext == "clear")
-            linenoiseClearScreen();
         writeln(outtext);
         if (outtext == "exit")
             return;
