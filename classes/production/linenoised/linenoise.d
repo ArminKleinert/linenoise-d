@@ -14,13 +14,22 @@ import core.sys.posix.unistd;
 
 import std.string : icmp, toStringz;
 import std.conv : to;
+import std.array : Appender, appender;
 
+/*
 extern (C) public struct linenoiseCompletions {
-    size_t len;
+    size_t length;
     char** cvec;
-}
 
-alias linenoiseCompletionCallback = void function(const char*, linenoiseCompletions*);
+    char* opIndex(size_t i) {
+        return cvec[i];
+    }
+}
+*/
+
+alias linenoiseCompletions = Appender!(string[]);
+
+alias linenoiseCompletionCallback = void function(const char*, linenoiseCompletions);
 alias linenoiseHintsCallback = char* function(const char*, int* color, int* bold);
 alias linenoiseFreeHintsCallback = void function(void*);
 
@@ -38,8 +47,8 @@ private int rawmode = 0; /* For atexit() function to check if restore is needed*
 private int mlmode = 0; /* Multi line mode. Default is single line. */
 private int atexit_registered = 0; /* Register atexit just 1 time. */
 private int history_max_len = LINENOISE_DEFAULT_HISTORY_MAX_LEN;
-private int history_len = 0;
-private char** history = null;
+//private int history_len = 0;
+private string[] history = [];
 
 /* The linenoiseState structure represents the state during line editing.
  * We pass this state to functions implementing specific editing
@@ -112,6 +121,7 @@ private int isUnsupportedTerm() {
 
     if (term1 == null)
         return 0;
+
     string term = to!string(term1);
     for (int j = 0; j < unsupported_term.length; j++) {
         if (term.icmp(unsupported_term[j]) == 0)
@@ -253,12 +263,7 @@ void linenoiseBeep() {
 /* ============================== Completion ================================ */
 
 /* Free a list of completion option populated by linenoiseAddCompletion(). */
-private void freeCompletions(linenoiseCompletions* lc) {
-    size_t i;
-    for (i = 0; i < (*lc).len; i++)
-        free((*lc).cvec[i]);
-    if ((*lc).cvec != null)
-        free((*lc).cvec);
+private void freeCompletions(linenoiseCompletions lc) {
 }
 
 /* This is an helper function for linenoiseEdit() and is called when the
@@ -268,23 +273,23 @@ private void freeCompletions(linenoiseCompletions* lc) {
  * The state of the editing is encapsulated into the pointed linenoiseState
  * structure as described in the structure definition. */
 private int completeLine(linenoiseState* ls) {
-    linenoiseCompletions lc = {0, null};
+    linenoiseCompletions lc = appender!(string[]);
     ssize_t nread, nwritten;
     char c = 0;
 
-    completionCallback((*ls).buf, &lc);
-    if (lc.len == 0) {
+    completionCallback((*ls).buf, lc);
+    if (lc[].length == 0) {
         linenoiseBeep();
     } else {
         size_t stop = 0, i = 0;
 
         while (!stop) {
             /* Show completion or original buffer */
-            if (i < lc.len) {
+            if (i < lc[].length) {
                 linenoiseState saved = *ls;
 
-                (*ls).len = (*ls).pos = strlen(lc.cvec[i]);
-                (*ls).buf = lc.cvec[i];
+                (*ls).len = (*ls).pos = lc[][i].length;
+                (*ls).buf = cast(char*) lc[][i].toStringz;
                 refreshLine(ls);
                 (*ls).len = saved.len;
                 (*ls).pos = saved.pos;
@@ -295,26 +300,28 @@ private int completeLine(linenoiseState* ls) {
 
             nread = read((*ls).ifd, &c, 1);
             if (nread <= 0) {
-                freeCompletions(&lc);
+                freeCompletions(lc);
                 return -1;
             }
 
             switch (c) {
             case 9: /* tab */
-                i = (i + 1) % (lc.len + 1);
-                if (i == lc.len)
+                i = (i + 1) % (lc[].length + 1);
+                if (i == lc[].length)
                     linenoiseBeep();
                 break;
             case 27: /* escape */
                 /* Re-show original buffer */
-                if (i < lc.len)
+                if (i < lc[].length)
                     refreshLine(ls);
                 stop = 1;
                 break;
             default:
                 /* Update buffer and return */
-                if (i < lc.len) {
-                    nwritten = snprintf((*ls).buf, (*ls).buflen, "%s", lc.cvec[i]);
+                if (i < lc[].length) {
+                    string text = lc[][i];
+                    nwritten = snprintf((*ls).buf, (*ls).buflen, "%s",
+                            cast(char*) text.toStringz);
                     (*ls).len = (*ls).pos = nwritten;
                 }
                 stop = 1;
@@ -323,7 +330,7 @@ private int completeLine(linenoiseState* ls) {
         }
     }
 
-    freeCompletions(&lc);
+    freeCompletions(lc);
     return c; /* Return last read character */
 }
 
@@ -348,22 +355,8 @@ extern (C) void linenoiseSetFreeHintsCallback(linenoiseFreeHintsCallback fn) {
  * in order to add completion options given the input string when the
  * user typed <tab>. See the example.c source code for a very easy to
  * understand example. */
-extern (C) void linenoiseAddCompletion(linenoiseCompletions* lc, const char* str) {
-    size_t len = strlen(str);
-    char* copied;
-    char** cvec;
-
-    copied = cast(char*) malloc(len + 1);
-    if (copied == null)
-        return;
-    memcpy(copied, str, len + 1);
-    cvec = cast(char**) realloc((*lc).cvec, (char*).sizeof * ((*lc).len + 1));
-    if (cvec == null) {
-        free(copied);
-        return;
-    }
-    (*lc).cvec = cvec;
-    (*lc).cvec[(*lc).len++] = copied;
+extern (C) void linenoiseAddCompletion(linenoiseCompletions lc, const char* str) {
+    lc ~= to!string(str);
 }
 
 /* =========================== Line editing ================================= */
@@ -637,23 +630,23 @@ private const int LINENOISE_HISTORY_NEXT = 0;
 private const int LINENOISE_HISTORY_PREV = 1;
 
 void linenoiseEditHistoryNext(linenoiseState* l, int dir) {
-    if (history_len > 1) {
+    if (history.length > 1) {
         /* Update the current history entry before to
          * overwrite it with the next one. */
-        free(history[history_len - 1 - (*l).history_index]);
-        history[history_len - 1 - (*l).history_index] = strdup((*l).buf);
+        history[history.length - 1 - (*l).history_index] = to!string((*l).buf);
         /* Show the new entry */
         (*l).history_index += (dir == LINENOISE_HISTORY_PREV) ? 1 : -1;
         if ((*l).history_index < 0) {
             (*l).history_index = 0;
             return;
-        } else if ((*l).history_index >= history_len) {
-            (*l).history_index = history_len - 1;
+        } else if ((*l).history_index >= history.length) {
+            (*l).history_index = cast(int) history.length - 1;
             return;
         }
-        strncpy((*l).buf, history[history_len - 1 - (*l).history_index], (*l).buflen);
-        (*l).buf[(*l).buflen - 1] = '\0';
-        (*l).len = (*l).pos = strlen((*l).buf);
+        string temp = history[history.length - 1 - (*l).history_index];
+        (*l).buf = cast(char*) temp.toStringz;
+        (*l).len = (*l).pos = temp.length;
+
         refreshLine(l);
     }
 }
@@ -748,8 +741,6 @@ private int linenoiseEdit(int stdin_fd, int stdout_fd, char* buf, size_t buflen,
 
         switch (c) {
         case KEY_ACTION.ENTER: /* enter */
-            history_len--;
-            free(history[history_len]);
             if (mlmode)
                 linenoiseEditMoveEnd(&l);
             if (hintsCallback) {
@@ -773,8 +764,6 @@ private int linenoiseEdit(int stdin_fd, int stdout_fd, char* buf, size_t buflen,
             if (l.len > 0) {
                 linenoiseEditDelete(&l);
             } else {
-                history_len--;
-                free(history[history_len]);
                 return -1;
             }
             break;
@@ -1032,13 +1021,7 @@ extern (C) void linenoiseFree(void* ptr) {
 /* Free the history, but does not reset it. Only used when we have to
  * exit() to avoid memory leaks are reported by valgrind & co. */
 private void freeHistory() {
-    if (history) {
-        int j;
-
-        for (j = 0; j < history_len; j++)
-            free(history[j]);
-        free(history);
-    }
+    destroy(history);
 }
 
 /* At exit we'll try to fix the terminal to the initial conditions. */
@@ -1062,28 +1045,26 @@ extern (C) int linenoiseHistoryAdd(const char* line) {
 
     /* Initialization on first call. */
     if (history == null) {
-        history = cast(char**) malloc((char*).sizeof * history_max_len);
-        if (history == null)
-            return 0;
-        memset(history, 0, ((char*).sizeof * history_max_len));
+        history = [];
     }
 
     /* Don't add duplicated lines. */
-    if (history_len && !strcmp(history[history_len - 1], line))
+    if (history.length > 0 && history[$ - 1] == to!string(line))
         return 0;
 
     /* Add an heap allocated copy of the line in the history.
      * If we reached the max length, remove the older line. */
-    linecopy = strdup(line);
-    if (!linecopy)
-        return 0;
-    if (history_len == history_max_len) {
-        free(history[0]);
-        memmove(history, history + 1, (char*).sizeof * (history_max_len - 1));
-        history_len--;
+    if (history.length == history_max_len) {
+        history = history[1 .. $];
     }
-    history[history_len] = linecopy;
-    history_len++;
+
+    // If the last entry in history is blank, override it.
+    if (history.length > 0 && history[$ - 1].length == 0)
+        history.length--;
+
+    // Append string to history
+    history ~= to!string(line);
+
     return 1;
 }
 
@@ -1092,33 +1073,15 @@ extern (C) int linenoiseHistoryAdd(const char* line) {
  * just the latest 'len' elements if the new history length value is smaller
  * than the amount of items already inside the history. */
 extern (C) int linenoiseHistorySetMaxLen(int len) {
-    char** newhis;
-
     if (len < 1)
         return 0;
-    if (history) {
-        int tocopy = history_len;
 
-        newhis = cast(char**) malloc((char*).sizeof * len);
-        if (newhis == null)
-            return 0;
-
-        /* If we can't copy everything, free the elements we'll not use. */
-        if (len < tocopy) {
-            int j;
-
-            for (j = 0; j < tocopy - len; j++)
-                free(history[j]);
-            tocopy = len;
-        }
-        memset(newhis, 0, (char*).sizeof * len);
-        memcpy(newhis, history + (history_len - tocopy), (char*).sizeof * tocopy);
-        free(history);
-        history = newhis;
-    }
     history_max_len = len;
-    if (history_len > history_max_len)
-        history_len = history_max_len;
+
+    if (history && history.length > history_max_len) {
+        history = history[$ - len .. $];
+    }
+
     return 1;
 }
 
@@ -1134,8 +1097,8 @@ extern (C) int linenoiseHistorySave(const char* filename) {
     if (fp == null)
         return -1;
     chmod(filename, S_IRUSR | S_IWUSR);
-    for (j = 0; j < history_len; j++)
-        fprintf(fp, "%s\n", history[j]);
+    foreach (string s; history)
+        fprintf(fp, "%s\n", s.toStringz);
     fclose(fp);
     return 0;
 }
