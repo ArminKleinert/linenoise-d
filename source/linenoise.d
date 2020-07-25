@@ -22,17 +22,6 @@ void dbug(string s) {
     std.stdio.stderr.writeln(s);
 }
 
-/*
-extern (C) public struct linenoiseCompletions {
-    size_t length;
-    char** cvec;
-
-    char* opIndex(size_t i) {
-        return cvec[i];
-    }
-}
-*/
-
 alias linenoiseCompletions = Appender!(string[]);
 
 alias linenoiseCompletionCallback = void function(const char*, linenoiseCompletions);
