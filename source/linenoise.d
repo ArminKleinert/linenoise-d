@@ -52,25 +52,24 @@ class linenoiseState {
     int ifd; /* Terminal stdin file descriptor. */
     int ofd; /* Terminal stdout file descriptor. */
     char* buf; /* Edited line buffer. */
-    size_t buflen; /* Edited line buffer size. */
+    int buflen; /* Edited line buffer size. */
     const char* prompt; /* Prompt to display. */
-    size_t plen; /* Prompt length. */
-    size_t pos; /* Current cursor position. */
-    size_t oldpos; /* Previous refresh cursor position. */
-    size_t len; /* Current edited line length. */
-    size_t cols; /* Number of columns in terminal. */
-    size_t maxrows; /* Maximum num of rows used so far (multiline mode) */
+    int plen; /* Prompt length. */
+    int pos; /* Current cursor position. */
+    int oldpos; /* Previous refresh cursor position. */
+    int len; /* Current edited line length. */
+    int cols; /* Number of columns in terminal. */
+    int maxrows; /* Maximum num of rows used so far (multiline mode) */
     int history_index; /* The history index we are currently editing. */
 
-    this(int ifd, int ofd, char* buf, size_t buflen, const char* prompt,
-            size_t plen, size_t pos, size_t oldpos, size_t len, size_t cols,
-            size_t maxrows, int history_index) {
+    this(int ifd, int ofd, char* buf, int buflen, const char* prompt, int pos,
+            int oldpos, int len, int cols, int maxrows, int history_index) {
         this.ifd = ifd;
         this.ofd = ofd;
         this.buf = buf;
         this.buflen = buflen;
         this.prompt = prompt;
-        this.plen = plen;
+        this.plen = cast(int) strlen(prompt);
         this.pos = pos;
         this.oldpos = oldpos;
         this.len = len;
@@ -80,8 +79,8 @@ class linenoiseState {
     }
 
     linenoiseState copy() {
-        return new linenoiseState(ifd, ofd, buf, buflen, prompt, plen, pos,
-                oldpos, len, cols, maxrows, history_index);
+        return new linenoiseState(ifd, ofd, buf, buflen, prompt, pos, oldpos,
+                len, cols, maxrows, history_index);
     }
 }
 
@@ -290,7 +289,8 @@ private void freeCompletions(linenoiseCompletions lc) {
  * structure as described in the structure definition. */
 private int completeLine(linenoiseState ls) {
     linenoiseCompletions lc = appender!(string[]);
-    ssize_t nread, nwritten;
+    ssize_t nread;
+    int nwritten;
     char c = 0;
 
     completionCallback(ls.buf, lc);
@@ -304,7 +304,7 @@ private int completeLine(linenoiseState ls) {
             if (i < lc[].length) {
                 linenoiseState saved = ls.copy();
 
-                ls.len = ls.pos = lc[][i].length;
+                ls.len = ls.pos = cast(int)lc[][i].length;
                 ls.buf = cast(char*) lc[][i].toStringz;
                 refreshLine(ls);
                 ls.len = saved.len;
@@ -440,7 +440,7 @@ private void refreshShowHints(abuf* ab, linenoiseState l, int plen) {
 private void refreshSingleLine(linenoiseState l) {
     char[64] seq;
     auto seq_ptr = seq.ptr;
-    size_t plen = strlen(l.prompt);
+    size_t plen = l.plen;
     int fd = l.ofd;
     char* buf = l.buf;
     size_t len = l.len;
@@ -461,7 +461,7 @@ private void refreshSingleLine(linenoiseState l) {
     snprintf(seq_ptr, 64, "\r");
     abAppend(&ab, seq_ptr, cast(int) strlen(seq_ptr));
     /* Write the prompt and the current buffer content */
-    abAppend(&ab, l.prompt, cast(int) strlen(l.prompt));
+    abAppend(&ab, l.prompt, cast(int) l.plen);
     if (maskmode == 1) {
         while (len--)
             abAppend(&ab, "*", 1);
@@ -488,7 +488,7 @@ private void refreshSingleLine(linenoiseState l) {
 private void refreshMultiLine(linenoiseState l) {
     char[64] seq;
     auto seq_ptr = seq.ptr;
-    int plen = cast(int) strlen(l.prompt);
+    int plen = cast(int) l.plen;
     int rows = cast(int)((plen + l.len + l.cols - 1) / l.cols); /* rows used by current buf. */
     int rpos = cast(int)((plen + l.oldpos + l.cols) / l.cols); /* cursor relative row. */
     int rpos2; /* rpos after refresh. */
@@ -520,7 +520,7 @@ private void refreshMultiLine(linenoiseState l) {
     abAppend(&ab, seq_ptr, cast(int) strlen(seq_ptr));
 
     /* Write the prompt and the current buffer content */
-    abAppend(&ab, l.prompt, cast(int) strlen(l.prompt));
+    abAppend(&ab, l.prompt, cast(int) l.plen);
     if (maskmode == 1) {
         for (uint i = 0; i < l.len; i++)
             abAppend(&ab, "*", 1);
@@ -660,7 +660,7 @@ void linenoiseEditHistoryNext(linenoiseState l, int dir) {
         }
         strncpy(l.buf, history[history_len - 1 - l.history_index], l.buflen);
         l.buf[l.buflen - 1] = '\0';
-        l.len = l.pos = strlen(l.buf);
+        l.len = l.pos = cast(int)strlen(l.buf);
         refreshLine(l);
     }
 }
@@ -715,8 +715,8 @@ private int linenoiseEdit(int stdin_fd, int stdout_fd, char* buf, size_t buflen,
 
     /* Populate the linenoise state that we pass to functions implementing
      * specific editing functionalities. */
-    linenoiseState l = new linenoiseState(stdin_fd, stdout_fd, buf, buflen,
-            prompt, strlen(prompt), 0, 0, 0, getColumns(stdin_fd, stdout_fd), 0, 0);
+    linenoiseState l = new linenoiseState(stdin_fd, stdout_fd, buf, cast(int)buflen,
+            prompt, 0, 0, 0, getColumns(stdin_fd, stdout_fd), 0, 0);
 
     /* Buffer starts empty. */
     l.buf[0] = '\0';
