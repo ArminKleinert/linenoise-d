@@ -304,7 +304,7 @@ private int completeLine(linenoiseState ls) {
             if (i < lc[].length) {
                 linenoiseState saved = ls.copy();
 
-                ls.len = ls.pos = cast(int)lc[][i].length;
+                ls.len = ls.pos = cast(int) lc[][i].length;
                 ls.buf = cast(char*) lc[][i].toStringz;
                 refreshLine(ls);
                 ls.len = saved.len;
@@ -660,7 +660,7 @@ void linenoiseEditHistoryNext(linenoiseState l, int dir) {
         }
         strncpy(l.buf, history[history_len - 1 - l.history_index], l.buflen);
         l.buf[l.buflen - 1] = '\0';
-        l.len = l.pos = cast(int)strlen(l.buf);
+        l.len = l.pos = cast(int) strlen(l.buf);
         refreshLine(l);
     }
 }
@@ -715,8 +715,8 @@ private int linenoiseEdit(int stdin_fd, int stdout_fd, char* buf, size_t buflen,
 
     /* Populate the linenoise state that we pass to functions implementing
      * specific editing functionalities. */
-    linenoiseState l = new linenoiseState(stdin_fd, stdout_fd, buf, cast(int)buflen,
-            prompt, 0, 0, 0, getColumns(stdin_fd, stdout_fd), 0, 0);
+    linenoiseState l = new linenoiseState(stdin_fd, stdout_fd, buf,
+            cast(int) buflen, prompt, 0, 0, 0, getColumns(stdin_fd, stdout_fd), 0, 0);
 
     /* Buffer starts empty. */
     l.buf[0] = '\0';

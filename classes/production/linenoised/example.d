@@ -2,10 +2,17 @@ module linenoised_test;
 
 import linenoised;
 
+void dbug(string s) {
+    import std.stdio;
+
+    std.stdio.stderr.writeln(s);
+}
+
 void completion(const char* buf, linenoiseCompletions lc) {
+    import std.string;
+
     if (buf[0] == 'h') {
-        linenoiseAddCompletion(lc, "hello");
-        linenoiseAddCompletion(lc, "hello there");
+        linenoiseAddCompletion(lc, cast(char*) "hello".toStringz);
     }
 }
 
@@ -31,6 +38,7 @@ void main() {
 
     while (1) {
         auto text = linenoise("> ");
+        dbug(text is null ? "null" : to!string(text));
         linenoiseHistoryAdd(text);
         auto outtext = to!string(text);
         if (outtext == "multiline")
